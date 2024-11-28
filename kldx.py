@@ -631,71 +631,137 @@ def clean_text(text):
     text = re.sub(r'[\*_`]', '', text)      # Remove markdown formatting
     text = re.sub(r'\.{2,}', '.', text)     # Clean up multiple periods
     return ' '.join(text.split()).strip()
+# def get_financing_eligibility(company_info, profile_info, openai_api_key):
+#     """
+#     Get financing eligibility assessment based on company and profile information
+#     """
+#     # Combine all relevant information for analysis
+#     analysis_info = {
+#         "company_financials": {
+#             "profit_range": company_info.get('profit_range'),
+#             "cashflow_range": company_info.get('cashflow_range'),
+#             "debt_equity_ratio": company_info.get('debt_equity_ratio'),
+#             "shareholders_funds": company_info.get('shareholders_funds'),
+#         },
+#         "business_profile": {
+#             "industry": company_info.get('industry'),
+#             "staff_strength": company_info.get('staff_strength'),
+#             "customer_type": company_info.get('customer_type'),
+#         },
+#         "funding_request": {
+#             "amount": profile_info.get('funding_amount'),
+#             "purposes": profile_info.get('funding_purposes', {}),
+#             "types": profile_info.get('funding_types', {})
+#         }
+#     }
+
+#     prompt = f"""Based on the following company information, provide a detailed Financing Eligibility Assessment (KLDX):
+
+#     Financial Profile:
+#     - Profit Range: {analysis_info['company_financials']['profit_range']}
+#     - Cashflow Range: {analysis_info['company_financials']['cashflow_range']}
+#     - Debt/Equity Ratio: {analysis_info['company_financials']['debt_equity_ratio']}
+#     - Shareholders' Funds: {analysis_info['company_financials']['shareholders_funds']}
+
+#     Business Profile:
+#     - Industry: {analysis_info['business_profile']['industry']}
+#     - Staff Strength: {analysis_info['business_profile']['staff_strength']}
+#     - Customer Base: {analysis_info['business_profile']['customer_type']}
+
+#     Funding Request:
+#     - Amount Requested: {analysis_info['funding_request']['amount']}
+#     - Funding Purposes: {', '.join([k for k, v in analysis_info['funding_request']['purposes'].items() if v])}
+#     - Funding Types: {', '.join([k for k, v in analysis_info['funding_request']['types'].items() if v])}
+
+#     Please provide a comprehensive 650-word analysis that includes:
+
+#     1. Eligibility Status Header:
+#     - Clear statement of whether all criteria are met, partially met, or not met
+#     - Brief explanation of the overall assessment
+
+#     2. Detailed Criteria Analysis:
+#     - Identify specific areas where criteria are not met
+#     - Provide detailed explanation of why these criteria are not fulfilled
+#     - Include potential impact on financing eligibility
+
+#     3. Eligibility Score:
+#     - Express eligibility fulfillment as a percentage
+#     - Breakdown of how this percentage was calculated
+#     - Explanation of what this score means for financing prospects
+
+#     Include relevant industry benchmarks, financial ratios, and market comparisons to support the analysis.
+#     Focus on actionable insights and clear explanations of any shortfalls.
+#     """
+
+#     return get_openai_response(
+#         prompt,
+#         "You are a senior financial analyst specializing in SME financing eligibility assessment. Provide detailed, fact-based analysis with specific recommendations.",
+#         openai_api_key
+#     )
 def get_financing_eligibility(company_info, profile_info, openai_api_key):
     """
-    Get financing eligibility assessment based on company and profile information
+    Get financing eligibility assessment based on KLDX criteria
     """
-    # Combine all relevant information for analysis
-    analysis_info = {
-        "company_financials": {
-            "profit_range": company_info.get('profit_range'),
-            "cashflow_range": company_info.get('cashflow_range'),
-            "debt_equity_ratio": company_info.get('debt_equity_ratio'),
-            "shareholders_funds": company_info.get('shareholders_funds'),
-        },
-        "business_profile": {
-            "industry": company_info.get('industry'),
-            "staff_strength": company_info.get('staff_strength'),
-            "customer_type": company_info.get('customer_type'),
-        },
-        "funding_request": {
-            "amount": profile_info.get('funding_amount'),
-            "purposes": profile_info.get('funding_purposes', {}),
-            "types": profile_info.get('funding_types', {})
-        }
-    }
+    # Extract relevant information
+    shareholders_funds = company_info.get('shareholders_funds', '')
+    incorporation_status = company_info.get('incorporation_status', '')
+    debt_equity_ratio = company_info.get('debt_equity_ratio', '')
+    cashflow_range = company_info.get('cashflow_range', '')
 
-    prompt = f"""Based on the following company information, provide a detailed Financing Eligibility Assessment (KLDX):
+    # Check shareholders' funds minimum RM500,000
+    shareholders_funds_status = False
+    if shareholders_funds in ['>500k - 1m', '1 - 5m', '>5 - 10m', '>10 - 30m', '>30 - 50m', '>50m']:
+        shareholders_funds_status = True
 
-    Financial Profile:
-    - Profit Range: {analysis_info['company_financials']['profit_range']}
-    - Cashflow Range: {analysis_info['company_financials']['cashflow_range']}
-    - Debt/Equity Ratio: {analysis_info['company_financials']['debt_equity_ratio']}
-    - Shareholders' Funds: {analysis_info['company_financials']['shareholders_funds']}
+    # Check incorporation and operations in Malaysia
+    incorporation_status_met = incorporation_status == "Yes"
 
-    Business Profile:
-    - Industry: {analysis_info['business_profile']['industry']}
-    - Staff Strength: {analysis_info['business_profile']['staff_strength']}
-    - Customer Base: {analysis_info['business_profile']['customer_type']}
+    # Check gearing ratio not more than 3x
+    gearing_ratio_status = False
+    if debt_equity_ratio in ['<0.5', '0.5-1.0x', '>1.0 - 3x']:
+        gearing_ratio_status = True
 
-    Funding Request:
-    - Amount Requested: {analysis_info['funding_request']['amount']}
-    - Funding Purposes: {', '.join([k for k, v in analysis_info['funding_request']['purposes'].items() if v])}
-    - Funding Types: {', '.join([k for k, v in analysis_info['funding_request']['types'].items() if v])}
+    # Check positive operating cash flow
+    cashflow_status = False
+    if cashflow_range not in ['<0']:
+        cashflow_status = True
 
-    Please provide a comprehensive 650-word analysis that includes:
+    # Calculate eligibility percentage
+    criteria_met = [shareholders_funds_status, incorporation_status_met, 
+                   gearing_ratio_status, cashflow_status]
+    eligibility_percentage = (sum(criteria_met) / 4) * 100
+
+    prompt = f"""Based on the KLDX financing criteria assessment, provide a detailed 650-word analysis with the following structure:
 
     1. Eligibility Status Header:
-    - Clear statement of whether all criteria are met, partially met, or not met
-    - Brief explanation of the overall assessment
+    - Company has met {sum(criteria_met)} out of 4 criteria ({eligibility_percentage:.1f}% fulfillment)
+    - Shareholders' Funds Requirement: {'Met' if shareholders_funds_status else 'Not Met'}
+    - Malaysian Incorporation: {'Met' if incorporation_status_met else 'Not Met'}
+    - Gearing Ratio Requirement: {'Met' if gearing_ratio_status else 'Not Met'}
+    - Operating Cash Flow: {'Met' if cashflow_status else 'Not Met'}
 
-    2. Detailed Criteria Analysis:
-    - Identify specific areas where criteria are not met
-    - Provide detailed explanation of why these criteria are not fulfilled
-    - Include potential impact on financing eligibility
+    2. Detailed Analysis of Unmet Criteria:
+    Shareholders' Funds: {company_info.get('shareholders_funds')}
+    Incorporation Status: {company_info.get('incorporation_status')}
+    Debt/Equity Ratio: {company_info.get('debt_equity_ratio')}
+    Operating Cash Flow: {company_info.get('cashflow_range')}
 
     3. Eligibility Score:
-    - Express eligibility fulfillment as a percentage
-    - Breakdown of how this percentage was calculated
-    - Explanation of what this score means for financing prospects
+    - Overall Score: {eligibility_percentage:.1f}%
+    - Provide detailed explanation of score implications
+    - Breakdown of how each criterion affects overall eligibility
 
-    Include relevant industry benchmarks, financial ratios, and market comparisons to support the analysis.
-    Focus on actionable insights and clear explanations of any shortfalls.
-    """
+    Please provide a comprehensive analysis that:
+    1. Clearly states whether all criteria are met, partially met, or not met
+    2. Provides detailed insights into areas where criteria are not met
+    3. Explains the {eligibility_percentage:.1f}% eligibility score with supporting facts
+
+    Format the response in clear sections with supporting data points and industry context.
+    Keep the total response to 650 words."""
 
     return get_openai_response(
         prompt,
-        "You are a senior financial analyst specializing in SME financing eligibility assessment. Provide detailed, fact-based analysis with specific recommendations.",
+        "You are a financial analyst specializing in SME financing eligibility assessment. Provide a detailed, fact-based analysis focusing on the KLDX financing criteria.",
         openai_api_key
     )
 def get_business_option_summary(selected_areas, suggestions_data, openai_api_key):
