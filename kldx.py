@@ -837,9 +837,9 @@ def create_header_footer_disclaimer(canvas, doc):
     
     if doc.page > 1:
         # Add logos if they exist
-        x_start = doc.width + doc.leftMargin - 1.0 * inch
+        x_start = doc.width + doc.leftMargin - 2.0 * inch
         y_position = doc.height + doc.topMargin - 0.1 * inch
-        image_width = 1.8 * inch
+        image_width = 2.0 * inch
         image_height = 0.5 * inch
         
         if os.path.exists("kldxlogo.png"):
@@ -864,7 +864,7 @@ def create_header_footer_disclaimer(canvas, doc):
         canvas.setFillColor(colors.white)
         canvas.setFont(bold_font, 27)
         canvas.drawString(doc.leftMargin + 20, 
-                         doc.height + doc.topMargin - 0.12*inch,  # Adjusted position
+                         doc.height + doc.topMargin - 0.07*inch,  # Adjusted position
                          "DISCLAIMER")
 
         # Draw line below the header text
@@ -943,9 +943,9 @@ def generate_pdf_report(user_data, analyses_data, company_info):
     # Content sections
     sections = [
         ("Company Profile Analysis", analyses_data.get('company_analysis')),
-        # ("Business Priority Analysis", analyses_data.get('business_priority_suggestions')),
+        ("Business Priority Analysis", analyses_data.get('business_priority_suggestions')),
         ("Business Priorites", analyses_data.get('executive_summary')),
-        ("Strategic Areas Analysis", analyses_data.get('selected_areas_analysis')),  # This is a dictionary
+        # ("Strategic Areas Analysis", analyses_data.get('selected_areas_analysis')),  # This is a dictionary
         ("Financial Profile Analysis", analyses_data.get('company_profile')),
         ("KLDX Assessment", analyses_data.get('financing_eligibility')),
         ("Comprehensive Conclusion", analyses_data.get('conclusion_analysis'))
@@ -975,11 +975,13 @@ def generate_pdf_report(user_data, analyses_data, company_info):
     elements.append(PageBreak())
     
     # Add main content sections
-    for title, content in sections:
+    for i, (title, content) in enumerate(sections):
         elements.append(Paragraph(title, styles['heading']))
         if content:
             process_content(content, styles, elements)
-        elements.append(PageBreak())
+        # Only add page break if it's not the last section
+        if i < len(sections) - 1:
+            elements.append(PageBreak())
     
     # Add footer with page numbers
     class NumberedCanvas(canvas.Canvas):
@@ -1314,9 +1316,9 @@ def create_header_footer(canvas, doc):
     
     if doc.page > 1:
         # Add logos if they exist
-        x_start = doc.width + doc.leftMargin - 1.0 * inch
+        x_start = doc.width + doc.leftMargin - 2.0 * inch
         y_position = doc.height + doc.topMargin - 0.1 * inch
-        image_width = 1.8 * inch
+        image_width = 2.0 * inch
         image_height = 0.5 * inch
         
         if os.path.exists("kldxlogo.png"):
@@ -1537,10 +1539,10 @@ def main():
                                     'company_analysis': st.session_state.user_data['company_analysis'],
                                     'business_priority_suggestions': st.session_state.user_data['business_priority_suggestions'],
                                     'executive_summary': st.session_state.user_data['executive_summary'],
-                                    'selected_areas_analysis': {
-                                        area: st.session_state.user_data.get(f"{area.lower().replace(' ', '_')}_analysis")
-                                        for area in st.session_state.user_data.get('selected_areas', [])
-                                    },
+                                    # 'selected_areas_analysis': {
+                                    #     area: st.session_state.user_data.get(f"{area.lower().replace(' ', '_')}_analysis")
+                                    #     for area in st.session_state.user_data.get('selected_areas', [])
+                                    # },
                                     'company_profile': st.session_state.user_data['company_summary'],
                                     'financing_eligibility': st.session_state.user_data['financing_eligibility'],
                                     'conclusion_analysis': st.session_state.user_data['conclusion_analysis']
