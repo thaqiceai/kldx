@@ -52,6 +52,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
+import uuid
 BUSINESS_OPTIONS = {
     "Business Valuation": "I want to assess my company's worth, helping me make informed decisions and gain investor trust.",
     "Financial Healthcheck": "I want to review my finances, checking assets, debts, cash flow, and overall stability",
@@ -194,7 +195,7 @@ def create_ascii_table(headers, rows, column_widths=None):
     return table
 
 def send_email_with_attachment(receiver_email, company_name, subject, body, pdf_buffer, statistics):
-    """Send an email with the PDF attachment, including statistics in table format."""
+    """Send an email with the PDF attachment, including statistics and contact details."""
     try:
         msg = MIMEMultipart()
         msg['From'] = EMAIL_SENDER
@@ -235,10 +236,15 @@ def send_email_with_attachment(receiver_email, company_name, subject, body, pdf_
         ]
         output_table = create_ascii_table(output_headers, output_rows)
 
-        # Format the email body
+        # Format the email body with contact details
         formatted_body = f"""Dear Recipient,
 
 {body}
+
+Contact Details:
+Full Name: {st.session_state.user_data.get('full_name', 'N/A')}
+Email: {st.session_state.user_data.get('email', 'N/A')}
+Mobile: {st.session_state.user_data.get('mobile_number', 'N/A')}
 
 Company Name: {company_name}
 Generated Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
@@ -405,7 +411,17 @@ def get_openai_response(prompt, system_content, api_key):
 def render_company_info_form():
     st.write("### Company Information")
     with st.form(key="company_info_form"):
+        # Contact Information Section
+        st.write("#### Contact Information")
+        col1, col2 = st.columns(2)
+        with col1:
+            full_name = st.text_input("Full Name")
+            mobile_number = st.text_input("Mobile Number")
+        with col2:
+            email = st.text_input("Email Address")
+        
         # Basic Information
+        st.write("#### Company Details")
         company_name = st.text_input("Company Name")
         
         # Industry Selection
@@ -434,7 +450,6 @@ def render_company_info_form():
         if incorporation_status == "Others":
             other_incorporation_details = st.text_input("Please specify your incorporation status")
         
-        # Rest of the form remains the same...
         st.write("Primary Currency (Select one)")
         selected_currency = st.selectbox(
             "Select your primary currency",
@@ -508,7 +523,10 @@ def render_company_info_form():
         )
 
         if st.form_submit_button("Submit Company Information"):
-            if company_name and selected_industry and business_model and products_services and differentiation:
+            if (company_name and selected_industry and business_model and 
+                products_services and differentiation and full_name and 
+                email and mobile_number):
+                
                 # Validate "Others" inputs
                 if selected_industry == "Others" and not other_industry_details:
                     st.error("Please specify your industry details.")
@@ -517,7 +535,23 @@ def render_company_info_form():
                     st.error("Please specify your incorporation status details.")
                     return None
                 
+                # Validate email format
+                if not re.match(r"[^@]+@[^@]+\.[^@]+", email):
+                    st.error("Please enter a valid email address.")
+                    return None
+                
+                # Validate mobile number (basic validation)
+                if not re.match(r"^[+\d][\d\s-]{8,}$", mobile_number):
+                    st.error("Please enter a valid mobile number.")
+                    return None
+                
                 return {
+                    # Contact Information
+                    "full_name": full_name,
+                    "email": email,
+                    "mobile_number": mobile_number,
+                    
+                    # Company Information
                     "company_name": company_name,
                     "industry": (
                         f"Others: {other_industry_details}" 
@@ -549,7 +583,7 @@ def render_company_info_form():
                     "differentiation": differentiation
                 }
             else:
-                st.error("Please fill in all required fields.")
+                st.error("Please fill in all required fields, including contact information.")
     return None
 def get_company_analysis(company_info, openai_api_key):
     """
@@ -596,7 +630,7 @@ def get_company_analysis(company_info, openai_api_key):
     - Consider macro-economic factors affecting the business
     - Assess competitive position in the market
     
-    5. Business Needs Analysis
+    3. Business Needs Analysis
     - Identify critical business requirements
     - Analyze growth and expansion needs
     - Evaluate operational improvement requirements
@@ -604,7 +638,8 @@ def get_company_analysis(company_info, openai_api_key):
     - Recommend priority areas for development
 
     Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
-    The analysis should be data-driven and provide actionable insights."""
+    The analysis should be data-driven and provide actionable insights.
+    Format all numerical examples in plain text with proper spacing no numbering point"""
 
     return get_openai_response(
         prompt,
@@ -649,6 +684,7 @@ Please provide a comprehensive 450-word analysis with the following structure:
 
 Include supporting facts and figures throughout the analysis to validate recommendations and insights.
 Focus on making the language clear, actionable, and relatable while maintaining strategic depth.
+Format all numerical examples in plain text with proper spacing no numbering point
 """
 
     return get_openai_response(
@@ -670,6 +706,7 @@ Provide a {suggestion_type} analysis with exactly these requirements (Maximum 20
 5. Explain how to Regularly review your progress and adapt your approach to stay aligned with your desired outcomes." Give examples on how to Advocate for continuous evaluation and flexibility in this situation.
 
 Keep responses specific to their context:
+Format all numerical examples in plain text with proper spacing no numbering point
 {business_info}"""
 
     return get_openai_response(prompt, 
@@ -854,13 +891,144 @@ def render_business_profile_form():
             return profile_info
             
     return None
+def process_content(content, styles, elements):
+    """Process content with proper formatting"""
+    if not content:
+        return
+    
+    # Handle case where content is a dictionary
+    if isinstance(content, dict):
+        for title, analysis in content.items():
+            elements.append(Paragraph(title, styles['subheading']))
+            if isinstance(analysis, str):
+                paragraphs = analysis.strip().split('\n')
+                for para in paragraphs:
+                    process_paragraph(para, styles, elements)
+            elements.append(Spacer(1, 0.2*inch))
+        return
+
+    # Define all possible section headers from various prompts
+    section_headers = [
+        # Company Analysis Headers
+        "Company Profile Analysis",
+        "Industry Overview",
+        "SWOT Analysis",
+        "Financial and Operating Summary",
+        "Business Needs Analysis",
+        
+        # Business Priority Headers
+        "Expanded Analysis",
+        "Synthesis and Organization",
+        "Practical Examples",
+        "Strategic Implications",
+        
+        # Funding Analysis Headers
+        "Working Capital Planning",
+        "Amount vs Purpose Analysis",
+        "Risk Assessment",
+        "Benefits Analysis",
+        
+        # Eligibility Headers
+        "Eligibility Status",
+        "Detailed Analysis of Unmet Criteria",
+        "Eligibility Score",
+        
+        # Conclusion Headers
+        "Advisor/Coach Need Analysis",
+        "Targeted Solutions",
+        "KPI Timeline Breakdown"
+    ]
+
+    # Split content into sections
+    sections = content.split('\n\n')
+    
+    for section in sections:
+        lines = section.strip().split('\n')
+        first_line = lines[0].strip()
+        
+        # Remove any Markdown formatting and special characters
+        first_line = re.sub(r'^[#\s*]+', '', first_line)  # Remove leading #, spaces, asterisks
+        first_line = re.sub(r'[\*:]$', '', first_line)    # Remove trailing asterisks and colons
+        first_line = first_line.strip()
+        
+        # Remove numbers at the start
+        first_line = re.sub(r'^\d+\.\s*', '', first_line)
+        
+        # Check if this is a header
+        is_header = any(header.lower() in first_line.lower() for header in section_headers)
+        
+        if is_header:
+            # Clean up the header text
+            header = first_line.strip()
+            # Remove any remaining special characters or formatting
+            header = re.sub(r'[*_:#]', '', header).strip()
+            
+            elements.append(Spacer(1, 0.2*inch))
+            elements.append(Paragraph(header, styles['subheading']))
+            elements.append(Spacer(1, 0.1*inch))
+            
+            # Process remaining lines in the section
+            if len(lines) > 1:
+                for para in lines[1:]:
+                    if para.strip():
+                        process_paragraph(para, styles, elements)
+        else:
+            # Process as regular paragraph
+            for para in lines:
+                if para.strip():
+                    process_paragraph(para, styles, elements)
+
+def process_paragraph(para, styles, elements):
+    """Process individual paragraph with formatting"""
+    clean_para = clean_text(para)
+    if not clean_para:
+        return
+    
+    # Handle bullet points and dashes
+    if clean_para.startswith(('•', '-', '*')):
+        text = clean_para.lstrip('•-* ').strip()
+        elements.append(Paragraph(f"• {text}", styles['bullet']))
+    
+    # Handle numbered points
+    elif re.match(r'^\d+\.?\s+', clean_para):
+        text = re.sub(r'^\d+\.?\s+', '', clean_para)
+        elements.extend([
+            Spacer(1, 0.1*inch),
+            create_highlight_box(text, styles),
+            Spacer(1, 0.1*inch)
+        ])
+    
+    # Handle scores and metrics
+    elif "Overall Score:" in clean_para:
+        # Remove asterisks and preserve the score
+        text = clean_para.replace('**', '').strip()
+        elements.append(Paragraph(text, styles['content']))
+    
+    else:
+        elements.append(Paragraph(clean_para, styles['content']))
+        elements.append(Spacer(1, 0.05*inch))
+
 def clean_text(text):
+    """Clean and format text by removing unwanted formatting"""
     if not text:
         return ""
-    text = re.sub(r'#{1,6}\s?', '', text)  # Remove markdown headers
-    text = re.sub(r'[\*_`]', '', text)      # Remove markdown formatting
-    text = re.sub(r'\.{2,}', '.', text)     # Clean up multiple periods
-    return ' '.join(text.split()).strip()
+    
+    # Remove style tags
+    text = re.sub(r'<userStyle>.*?</userStyle>', '', text)
+    
+    # Remove Markdown formatting without affecting content
+    text = text.replace('**', '')  # Remove bold markers
+    text = text.replace('*', '')   # Remove italic markers
+    text = text.replace('_', '')   # Remove underscore
+    text = text.replace(':', ': ') # Add space after colons
+    
+    # Remove Markdown headers while preserving text
+    text = re.sub(r'^#+\s*', '', text)
+    
+    # Clean up multiple spaces and preserve paragraph structure
+    text = ' '.join(text.split())
+    
+    return text.strip()
 # def get_financing_eligibility(company_info, profile_info, openai_api_key):
 #     """
 #     Get financing eligibility assessment based on company and profile information
@@ -930,68 +1098,69 @@ def clean_text(text):
 #     )
 def get_financing_eligibility(company_info, profile_info, openai_api_key):
     """
-    Get financing eligibility assessment based on KLDX criteria
+    Get financing eligibility assessment based on company and profile information
     """
-    # Extract relevant information
-    shareholders_funds = company_info.get('shareholders_funds', '')
-    incorporation_status = company_info.get('incorporation_status', '')
-    debt_equity_ratio = company_info.get('debt_equity_ratio', '')
-    cashflow_range = company_info.get('cashflow_range', '')
+    # Combine all relevant information for analysis
+    analysis_info = {
+        "company_financials": {
+            "profit_range": company_info.get('profit_range'),
+            "cashflow_range": company_info.get('cashflow_range'),
+            "debt_equity_ratio": company_info.get('debt_equity_ratio'),
+            "shareholders_funds": company_info.get('shareholders_funds'),
+        },
+        "business_profile": {
+            "industry": company_info.get('industry'),
+            "staff_strength": company_info.get('staff_strength'),
+            "customer_type": company_info.get('customer_type'),
+        },
+        "funding_request": {
+            "amount": profile_info.get('funding_amount'),
+            "purposes": profile_info.get('funding_purposes', {}),
+            "types": profile_info.get('funding_types', {})
+        }
+    }
 
-    # Check shareholders' funds minimum RM500,000
-    shareholders_funds_status = False
-    if shareholders_funds in ['>500k - 1m', '1 - 5m', '>5 - 10m', '>10 - 30m', '>30 - 50m', '>50m']:
-        shareholders_funds_status = True
+    prompt = f"""Based on the following company information, provide a detailed Financing Eligibility Assessment (KLDX):
 
-    # Check incorporation and operations in Malaysia
-    incorporation_status_met = incorporation_status == "Yes"
+    Financial Profile:
+    - Profit Range: {analysis_info['company_financials']['profit_range']}
+    - Cashflow Range: {analysis_info['company_financials']['cashflow_range']}
+    - Debt/Equity Ratio: {analysis_info['company_financials']['debt_equity_ratio']}
+    - Shareholders' Funds: {analysis_info['company_financials']['shareholders_funds']}
 
-    # Check gearing ratio not more than 3x
-    gearing_ratio_status = False
-    if debt_equity_ratio in ['<0.5', '0.5-1.0x', '>1.0 - 3x']:
-        gearing_ratio_status = True
+    Business Profile:
+    - Industry: {analysis_info['business_profile']['industry']}
+    - Staff Strength: {analysis_info['business_profile']['staff_strength']}
+    - Customer Base: {analysis_info['business_profile']['customer_type']}
 
-    # Check positive operating cash flow
-    cashflow_status = False
-    if cashflow_range not in ['<0']:
-        cashflow_status = True
+    Funding Request:
+    - Amount Requested: {analysis_info['funding_request']['amount']}
+    - Funding Purposes: {', '.join([k for k, v in analysis_info['funding_request']['purposes'].items() if v])}
+    - Funding Types: {', '.join([k for k, v in analysis_info['funding_request']['types'].items() if v])}
 
-    # Calculate eligibility percentage
-    criteria_met = [shareholders_funds_status, incorporation_status_met, 
-                   gearing_ratio_status, cashflow_status]
-    eligibility_percentage = (sum(criteria_met) / 4) * 100
-
-    prompt = f"""Based on the KLDX financing criteria assessment, provide a detailed 650-word analysis with the following structure:
+    Please provide a comprehensive 650-word analysis that includes:
 
     1. Eligibility Status Header:
-    - Company has met {sum(criteria_met)} out of 4 criteria ({eligibility_percentage:.1f}% fulfillment)
-    - Shareholders' Funds Requirement: {'Met' if shareholders_funds_status else 'Not Met'}
-    - Malaysian Incorporation: {'Met' if incorporation_status_met else 'Not Met'}
-    - Gearing Ratio Requirement: {'Met' if gearing_ratio_status else 'Not Met'}
-    - Operating Cash Flow: {'Met' if cashflow_status else 'Not Met'}
+    - Clear statement of whether all criteria are met, partially met, or not met
+    - Brief explanation of the overall assessment
 
-    2. Detailed Analysis of Unmet Criteria:
-    Shareholders' Funds: {company_info.get('shareholders_funds')}
-    Incorporation Status: {company_info.get('incorporation_status')}
-    Debt/Equity Ratio: {company_info.get('debt_equity_ratio')}
-    Operating Cash Flow: {company_info.get('cashflow_range')}
+    2. Detailed Criteria Analysis:
+    - Identify specific areas where criteria are not met
+    - Provide detailed explanation of why these criteria are not fulfilled
+    - Include potential impact on financing eligibility
 
     3. Eligibility Score:
-    - Overall Score: {eligibility_percentage:.1f}%
-    - Provide detailed explanation of score implications
-    - Breakdown of how each criterion affects overall eligibility
+    - Express eligibility fulfillment as a percentage
+    - Breakdown of how this percentage was calculated
+    - Explanation of what this score means for financing prospects
 
-    Please provide a comprehensive analysis that:
-    1. Clearly states whether all criteria are met, partially met, or not met
-    2. Provides detailed insights into areas where criteria are not met
-    3. Explains the {eligibility_percentage:.1f}% eligibility score with supporting facts
-
-    Format the response in clear sections with supporting data points and industry context.
-    Keep the total response to 650 words."""
+    Include relevant industry benchmarks, financial ratios, and market comparisons to support the analysis.
+    Focus on actionable insights and clear explanations of any shortfalls.
+    """
 
     return get_openai_response(
         prompt,
-        "You are a financial analyst specializing in SME financing eligibility assessment. Provide a detailed, fact-based analysis focusing on the KLDX financing criteria.",
+        "You are a senior financial analyst specializing in SME financing eligibility assessment. Provide detailed, fact-based analysis with specific recommendations.",
         openai_api_key
     )
 def get_business_option_summary(selected_areas, suggestions_data, openai_api_key):
@@ -1193,7 +1362,8 @@ def generate_pdf_report(user_data, analyses_data, company_info):
         rightMargin=inch,
         leftMargin=inch,
         topMargin=1.5*inch,
-        bottomMargin=inch
+        bottomMargin=inch,
+        company_name=company_info['name']  # Pass the company name here
     )
     
     # Define frames for different page types
@@ -1227,8 +1397,8 @@ def generate_pdf_report(user_data, analyses_data, company_info):
     
     # Cover page
     elements.append(NextPageTemplate('First'))
-    if os.path.exists("kldxfront.jpg"):
-        img = Image("kldxfront.jpg", width=letter[0], height=letter[1])
+    if os.path.exists("kldxfrontnew.png"):
+        img = Image("kldxfrontnew.png", width=letter[0], height=letter[1])
         elements.append(img)
     
     # Table of Contents
@@ -1239,12 +1409,12 @@ def generate_pdf_report(user_data, analyses_data, company_info):
     # Content sections
     sections = [
         ("Company Profile Analysis", analyses_data.get('company_analysis')),
+        ("KLDX Assessment", analyses_data.get('financing_eligibility')),
         ("Business Priority Analysis", analyses_data.get('business_priority_suggestions')),
         ("Business Priorites", analyses_data.get('executive_summary')),
         # ("Strategic Areas Analysis", analyses_data.get('selected_areas_analysis')),  # This is a dictionary
         ("Financial Profile Analysis", analyses_data.get('company_profile')),
-        ("KLDX Assessment", analyses_data.get('financing_eligibility')),
-        ("Comprehensive Conclusion", analyses_data.get('conclusion_analysis'))
+        ("Conclusion", analyses_data.get('conclusion_analysis'))
     ]
     
     # Add TOC entries
@@ -1321,7 +1491,7 @@ def generate_pdf_report(user_data, analyses_data, company_info):
     buffer.seek(0)
     return buffer
 def create_disclaimer_page(styles, elements):
-    """Create a single-page disclaimer with updated styling"""
+    """Create a single-page disclaimer with specific styling."""
     
     # Register fonts
     try:
@@ -1338,113 +1508,114 @@ def create_disclaimer_page(styles, elements):
         'header': ParagraphStyle(
             'Header',
             parent=styles['normal'],
-            fontSize=24,
+            fontSize=13,
             fontName=bold_font,
-            textColor=colors.white,
-            leading=28,
-            spaceBefore=0,
-            spaceAfter=15,
+            textColor=colors.HexColor('#4A5568'),  # Dark gray
+            leading=14,
+            spaceBefore=12.5,
+            spaceAfter=7.5,
+        ),
+        'subheader': ParagraphStyle(
+            'SubHeader',
+            parent=styles['normal'],
+            fontSize=11,
+            fontName=bold_font,
+            textColor=colors.black,
+            leading=12,
+            spaceBefore=5.5,
+            spaceAfter=2.5,
         ),
         'body_text': ParagraphStyle(
             'BodyText',
             parent=styles['normal'],
-            fontSize=10,
+            fontSize=9,
             fontName=base_font,
-            leading=14,
-            spaceBefore=6,
-            spaceAfter=6,
+            leading=10,
+            spaceBefore=1.5,
+            spaceAfter=1.5,
             textColor=colors.black,
         )
     }
 
-    # Create red header background
-    # elements.append(Table(
-    #     [[Paragraph("DISCLAIMER", disclaimer_styles['header'])]],
-    #     colWidths=[7.5*inch],
-    #     style=TableStyle([
-    #         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#8B0000')),
-    #         ('LEFTPADDING', (0, 0), (-1, -1), 20),
-    #         ('BOTTOMPADDING', (0, 0), (-1, -1), 15),
-    #         ('TOPPADDING', (0, 0), (-1, -1), 15),
-    #     ])
-    # ))
+    # Add main header
+    elements.append(Paragraph("Limitations of AI in Financial and Strategic Evaluations", disclaimer_styles['header']))
 
-    # Main disclaimer text
-    main_disclaimer = """This analysis report was generated by an AI-powered language model and is intended to provide information based on the data provided. However, it is important to note that while the AI model has been trained on a vast amount of data and strives to provide accurate and helpful information, it is still an automated system and may not always be errorfree or entirely comprehensive. Therefore, the analysis should be interpreted with caution and should not be considered as professional advice or a substitute for expert financial or investment reviewing guidance."""
+    # Add sections
+    sections = [
+        ("1. Data Dependency and Quality", 
+         "AI models rely heavily on the quality and completeness of the data fed into them. The accuracy of the analysis is contingent upon the integrity of the input data. Inaccurate, outdated, or incomplete data can lead to erroneous conclusions and recommendations. Users should ensure that the data used in AI evaluations is accurate and up-to-date."),
+        ("2. Algorithmic Bias and Limitations", 
+         "AI algorithms are designed based on historical data and predefined models. They may inadvertently incorporate biases present in the data, leading to skewed results. Additionally, AI models might not fully capture the complexity and nuances of human behavior or unexpected market changes, potentially impacting the reliability of the analysis."),
+        ("3. Predictive Limitations", 
+         "While AI can identify patterns and trends, it cannot predict future events with certainty. Financial markets and business environments are influenced by numerous unpredictable factors such as geopolitical events, economic fluctuations, and technological advancements. AI's predictions are probabilistic and should not be construed as definitive forecasts."),
+        ("4. Interpretation of Results", 
+         "AI-generated reports and analyses require careful interpretation. The insights provided by AI tools are based on algorithms and statistical models, which may not always align with real-world scenarios. It is essential to involve human expertise in interpreting AI outputs and making informed decisions."),
+        ("5. Compliance and Regulatory Considerations", 
+         "The use of AI in financial evaluations and business strategy formulation must comply with relevant regulations and standards. Users should be aware of legal and regulatory requirements applicable to AI applications in their jurisdiction and ensure that their use of AI tools aligns with these requirements."),
+    ]
 
-    elements.append(Paragraph(main_disclaimer, disclaimer_styles['body_text']))
+    for title, content in sections:
+        elements.append(Paragraph(title, disclaimer_styles['subheader']))
+        elements.append(Paragraph(content, disclaimer_styles['body_text']))
+    
+    # Add company disclaimer header
+    elements.append(Spacer(1, 12))
+    elements.append(Paragraph("Kapital DX Sdn Bhd (KLDX), Centre for AI Innovation (CEAI) and Advisory Partners’ Disclaimer", disclaimer_styles['header']))
 
-    # Add AI Limitations section
-    ai_limitations = """It is crucial to acknowledge that neither the AI developer nor the AI model itself assumes any responsibility for the accuracy, reliability, or completeness of the analysis presented. The AI-generated report is based solely on the data provided and does not take into account any additional external factors or circumstances that may impact the financial performance or position of the entity.
+    disclaimers = [
+        ("1. No Guarantee of Accuracy or Completeness", 
+         "While Kapital DX Sdn Bhd (KLDX), Centre for AI Innovation (CEAI) and its advisory partners strive to ensure that the AI-generated reports and insights are accurate and reliable, we do not guarantee the completeness or accuracy of the information provided. The insights are based on the data and models used, which may not fully account for all relevant factors or changes in the market."),
+        ("2. Not Financial or Professional Advice", 
+         "The AI-generated reports and insights are not intended as financial, investment, legal, or professional advice. Users should consult with qualified professionals before making any financial or strategic decisions based on AI-generated reports. Kapital DX Sdn Bhd (KLDX), Centre for AI Innovation (CEAI) and its advisory partners are not responsible for any decisions made based on the reports provided."),
+        ("3. Limitation of Liability", 
+         "Kapital DX Sdn Bhd (KLDX), Centre for AI Innovation (CEAI) and its advisory partners shall not be liable for any loss or damage arising from the use of AI-generated reports and insights. This includes, but is not limited to, any direct, indirect, incidental, or consequential damages resulting from reliance on the reports or decisions made based on them."),
+        ("4. No Endorsement of Third-Party Tools", 
+         "The use of third-party tools and data sources in AI evaluations is at the user’s discretion. Kapital DX Sdn Bhd (KLDX), Centre for AI Innovation (CEAI) and its advisory partners do not endorse or guarantee the performance or accuracy of any third-party tools or data sources used in conjunction with the AI-generated reports."),
+    ]
 
-Furthermore, it is important to understand that an AI model cannot replace the role of a fund manager or financial professional. The analysis report should not be considered as an investment recommendation or an endorsement of the entity's financial health. The information provided should be used as a starting point for further investigation and should be supplemented with independent verification, professional judgment, and financial expertise."""
+    for title, content in disclaimers:
+        elements.append(Paragraph(title, disclaimer_styles['subheader']))
+        elements.append(Paragraph(content, disclaimer_styles['body_text']))
+    
+    return elements
 
-    elements.append(Paragraph(ai_limitations, disclaimer_styles['body_text']))
 
-    # Add Knowledge Cutoff section
-    cutoff_note = """As all models have a knowledge cutoff date, users of this analysis report should be aware that the AI model may not be aware of the most recent developments or changes that have occurred. It is recommended to consult updated and reliable sources of information for the most current and accurate assessment of the entity's financial performance and risks."""
-
-    elements.append(Paragraph(cutoff_note, disclaimer_styles['body_text']))
-
-    # Add Additional Considerations section
-    additional_considerations = """It is important to remember that while AI-powered language models have come a long way in assisting financial analysis, they are not a substitute for human expertise. Financial professionals should be consulted when making important financial decisions. These experts have the training and experience to identify potential risks and opportunities that an AI model might miss. Additionally, human professionals can provide context and insight that an AI model might not be able to provide."""
-
-    elements.append(Paragraph(additional_considerations, disclaimer_styles['body_text']))
-
-    elements.append(Table(
-        [['']],
-        colWidths=[1*inch],
-        style=TableStyle([
-            ('LEFTPADDING', (0, 0), (-1, -1), 450),  # Adjust positioning as needed
-        ])
-    ))
 class PDFWithTOC(SimpleDocTemplate):
-    """
-    Enhanced PDF document class with Table of Contents support
-    """
+    """Enhanced PDF document class with Table of Contents support and company name"""
     def __init__(self, *args, **kwargs):
+        company_name = kwargs.pop('company_name', '')  # Extract company name from kwargs
         SimpleDocTemplate.__init__(self, *args, **kwargs)
+        self.company_name = company_name
         self.page_numbers = {}
         self.current_page = 1
 
-    def afterPage(self):
-        """Update current page number after each page"""
-        self.current_page += 2
-
-    def afterFlowable(self, flowable):
-        """Track the page numbers for headings to build TOC"""
-        if isinstance(flowable, Paragraph):
-            style = flowable.style.name
-            if style == 'heading':
-                text = flowable.getPlainText()
-                self.page_numbers[text] = self.current_page
 
 def create_company_profile_page(styles, company_info):
     """Create an enhanced company profile page with modern design elements"""
     elements = []
-    
+    report_id = str(uuid.uuid4())[:8]
     # Add some space at the top
     elements.append(Spacer(1, 1*inch))
     
     # Create a colored banner for the title
     title_table = Table(
-        [[Paragraph("Company Profile Analysis", styles['title'])]],
+        [[Paragraph("Company Profile Analysis", styles['heading'])]],
         colWidths=[7*inch],
         style=TableStyle([
-            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#F0F9FF')),
+            ('BACKGROUND', (0, 0), (-1, -1), colors.white),
             ('ALIGN', (0, 0), (-1, -1), 'CENTER'),
             ('TOPPADDING', (0, 0), (-1, -1), 30),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 30),
             ('LEFTPADDING', (0, 0), (-1, -1), 20),
             ('RIGHTPADDING', (0, 0), (-1, -1), 20),
-            ('LINEABOVE', (0, 0), (-1, 0), 2, colors.HexColor('#2B6CB0')),
-            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.HexColor('#2B6CB0')),
+            ('LINEABOVE', (0, 0), (-1, 0), 2, colors.black),
+            ('LINEBELOW', (0, 0), (-1, 0), 2, colors.black),
         ])
     )
     elements.append(title_table)
     
     # Add space before company info
-    elements.append(Spacer(1, 1*inch))
+    elements.append(Spacer(0.5, 0.5*inch))
     
     # Create a styled box for company information
     company_info_content = [
@@ -1453,24 +1624,34 @@ def create_company_profile_page(styles, company_info):
             [
                 [
                     Paragraph("Company Name", 
-                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.HexColor('#2B6CB0'), fontSize=12)),
+                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.black, fontSize=12)),
                     Paragraph(str(company_info.get('name', 'N/A')), styles['content'])
                 ],
                 [
                     Paragraph("Industry",
-                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.HexColor('#2B6CB0'), fontSize=12)),
+                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.black, fontSize=12)),
                     Paragraph(str(company_info.get('industry', 'N/A')), styles['content'])
                 ],
                 [
                     Paragraph("Report Date",
-                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.HexColor('#2B6CB0'), fontSize=12)),
+                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.black, fontSize=12)),
                     Paragraph(str(company_info.get('date', 'N/A')), styles['content'])
-                ]
+                ],
+                [
+                    Paragraph("Status",
+                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.black, fontSize=12)),
+                    Paragraph(f"Status: POC", styles['content'])
+                ], 
+                [
+                    Paragraph("Report ID",
+                             ParagraphStyle('Label', parent=styles['content'], textColor=colors.black, fontSize=12)),
+                    Paragraph(f"Report ID: {report_id}", styles['content'])
+                ]               
             ],
             colWidths=[2*inch, 4*inch],
             style=TableStyle([
-                ('GRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#E2E8F0')),
-                ('BACKGROUND', (0, 0), (0, -1), colors.HexColor('#F7FAFC')),
+                ('GRID', (0, 0), (-1, -1), 0.5, colors.black),
+                ('BACKGROUND', (0, 0), (0, -1), colors.lightgrey),
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
                 ('TOPPADDING', (0, 0), (-1, -1), 12),
                 ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
@@ -1486,7 +1667,7 @@ def create_company_profile_page(styles, company_info):
         style=TableStyle([
             ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
             ('BACKGROUND', (0, 0), (-1, -1), colors.white),
-            ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#90CDF4')),
+            ('BOX', (0, 0), (-1, -1), 1, colors.black),
             ('TOPPADDING', (0, 0), (-1, -1), 20),
             ('BOTTOMPADDING', (0, 0), (-1, -1), 20),
             ('LEFTPADDING', (0, 0), (-1, -1), 30),
@@ -1497,21 +1678,6 @@ def create_company_profile_page(styles, company_info):
     
     # Add decorative footer
     elements.append(Spacer(1, 1*inch))
-    footer_text = ParagraphStyle(
-        'Footer',
-        parent=styles['content'],
-        alignment=TA_CENTER,
-        textColor=colors.HexColor('#4A5568'),
-        fontSize=9
-    )
-    elements.append(Paragraph(
-        "Generated by Business Analysis Platform",
-        footer_text
-    ))
-    elements.append(Paragraph(
-        f"Report Date: {company_info.get('date', 'N/A')}",
-        footer_text
-    ))
     
     return elements
 def create_custom_styles():
@@ -1607,13 +1773,13 @@ def create_custom_styles():
     
     return styles
 def create_header_footer(canvas, doc):
-    """Create header and footer for pages"""
+    """Create header and footer for pages with company name"""
     canvas.saveState()
     
     if doc.page > 1:
         # Add logos if they exist
         x_start = doc.width + doc.leftMargin - 2.0 * inch
-        y_position = doc.height + doc.topMargin - 0.1 * inch
+        y_position = doc.height + doc.topMargin - 0.2 * inch
         image_width = 2.0 * inch
         image_height = 0.5 * inch
         
@@ -1627,16 +1793,16 @@ def create_header_footer(canvas, doc):
                 mask="auto"
             )
         
-        # Add header text
-        canvas.setFont("Helvetica-Bold", 24)
+        # Add company name below the report title
+        canvas.setFont("Helvetica-Bold", 16)  # Smaller font for company name
         canvas.drawString(
-            doc.leftMargin, 
-            doc.height + doc.topMargin - 0.1*inch,
-            "Business Analysis Report"
+            doc.leftMargin,
+            doc.height + doc.topMargin - 0.1*inch,  # Position it below the title
+            f"{doc.company_name if hasattr(doc, 'company_name') else ''}"
         )
         
-        # Add line below header
-        line_y_position = doc.height + doc.topMargin - 0.30 * inch
+        # Add line below header (adjusted position to account for company name)
+        line_y_position = doc.height + doc.topMargin - 0.35 * inch  # Moved down to accommodate company name
         canvas.setLineWidth(0.5)
         canvas.line(
             doc.leftMargin,
@@ -1650,70 +1816,12 @@ def create_header_footer(canvas, doc):
         canvas.drawString(
             doc.leftMargin,
             0.5 * inch,
-            f"Generated on {datetime.datetime.now().strftime('%B %d, %Y')}"
+            f"Generated on {datetime.datetime.now().strftime('%B %d, %Y at %I:%M %p')}"
         )
     
     canvas.restoreState()
-def process_content(content, styles, elements):
-    """Process content with proper formatting"""
-    if not content:
-        return
-    
-    # Handle case where content is a dictionary (for selected_areas_analysis)
-    if isinstance(content, dict):
-        for title, analysis in content.items():
-            elements.append(Paragraph(title, styles['subheading']))
-            if isinstance(analysis, str):
-                paragraphs = analysis.strip().split('\n')
-                for para in paragraphs:
-                    process_paragraph(para, styles, elements)
-            elements.append(Spacer(1, 0.2*inch))
-        return
 
-    # Handle string content
-    paragraphs = content.strip().split('\n')
-    for para in paragraphs:
-        process_paragraph(para, styles, elements)
 
-def process_paragraph(para, styles, elements):
-    """Process individual paragraph with formatting"""
-    clean_para = clean_text(para)
-    if not clean_para:
-        return
-        
-    if "Summary" in clean_para:
-        elements.append(Paragraph(clean_para, styles['subheading']))
-        return
-    if "Strengths and Advantages" in clean_para:
-        elements.append(Paragraph(clean_para, styles['subheading']))
-        return
-    if "Skills and Competencies" in clean_para:
-        elements.append(Paragraph(clean_para, styles['subheading']))
-        return
-    if "Compatible Personality and Behavioral Insights" in clean_para:
-        elements.append(PageBreak())
-        elements.append(Paragraph(clean_para, styles['subheading']))
-        return
-    
-    # Handle numbered points
-    point_match = re.match(r'^\d+\.?\s+(.+)', clean_para)
-    if point_match:
-        elements.extend([
-            Spacer(1, 0.1*inch),
-            create_highlight_box(point_match.group(1), styles),
-            Spacer(1, 0.1*inch)
-        ])
-    # Handle bullet points
-    elif clean_para.startswith(('•', '-', '*')):
-        elements.append(
-            Paragraph(
-                f"• {clean_para.lstrip('•-* ')}",
-                styles['bullet']
-            )
-        )
-    else:
-        elements.append(Paragraph(clean_para, styles['content']))
-        elements.append(Spacer(1, 0.05*inch))
 def create_highlight_box(text, styles):
     """Create highlighted box with consistent styling"""
     return Table(
@@ -1871,14 +1979,14 @@ def main():
                                         # Calculate statistics before sending email
                                         analysis_statistics = calculate_analysis_statistics(st.session_state.user_data)
                                         
-                                        send_email_with_attachment(
-                                            "thaqiyuddin58@gmail.com",  # Fixed email address
-                                            st.session_state.user_data['company_name'],  # Add company name
-                                            "KLDX Analysis Report",
-                                            "Please find attached the KLDX Analysis Report generated from KLDX Lite GenAI.",
-                                            pdf_buffer,
-                                            analysis_statistics  # Add statistics to email
-                                        )
+                                    # send_email_with_attachment(
+                                    #     st.session_state.user_data.get('email', "thaqiyuddin58@gmail.com"),  # Use provided email with fallback
+                                    #     st.session_state.user_data['company_name'],
+                                    #     "KLDX Analysis Report",
+                                    #     "Please find attached the KLDX Analysis Report generated from KLDX Lite GenAI.",
+                                    #     pdf_buffer,
+                                    #     analysis_statistics
+                                    # )
                             except Exception as e:
                                 st.error(f"Error generating PDF: {str(e)}")
                                 print(f"Detailed error: {str(e)}")  # For debugging
