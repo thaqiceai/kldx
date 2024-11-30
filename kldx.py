@@ -725,9 +725,9 @@ Please provide a comprehensive 450-word analysis with the following structure:
    - Success metrics
 
 Include supporting facts and figures throughout the analysis to validate recommendations and insights.
-Focus on making the language clear, actionable, and relatable while maintaining strategic depth.
-Format all numerical examples in plain text with proper spacing no numbering point
-"""
+Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
+The analysis should be data-driven and provide actionable insights.
+Format all numerical examples in plain text with proper spacing no numbering point"""
 
     return get_openai_response(
         prompt,
@@ -747,7 +747,8 @@ Provide a {suggestion_type} analysis with exactly these requirements (Maximum 20
 4. Explain how to Communicate your priorities clearly to your team to ensure alignment and collective action." Provide examples on how to emphasize the value of shared understanding and collaboration.
 5. Explain how to Regularly review your progress and adapt your approach to stay aligned with your desired outcomes." Give examples on how to Advocate for continuous evaluation and flexibility in this situation.
 
-Keep responses specific to their context:
+Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
+The analysis should be data-driven and provide actionable insights.
 Format all numerical examples in plain text with proper spacing no numbering point
 {business_info}"""
 
@@ -818,7 +819,10 @@ def get_company_summary(profile_info, openai_api_key):
     - Impact on business growth and sustainability
 
     Please ensure the response is practical, actionable, and includes relevant supporting facts and figures where possible.
-    Keep the total response within 600 words."""
+    Keep the total response within 600 words.
+    Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
+    The analysis should be data-driven and provide actionable insights.
+    Format all numerical examples in plain text with proper spacing no numbering point"""
 
     return get_openai_response(
         prompt,
@@ -1210,6 +1214,9 @@ def get_financing_eligibility(company_info, profile_info, openai_api_key):
     Focus on actionable insights and clear explanations of any shortfalls.
 
     NO need to put "Financing Eligibility Assessment for KLDX" word
+    Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
+    The analysis should be data-driven and provide actionable insights.
+    Format all numerical examples in plain text with proper spacing no numbering point
     """
 
     return get_openai_response(
@@ -1251,7 +1258,10 @@ def get_business_option_summary(selected_areas, suggestions_data, openai_api_key
 
     Keep the summary strategic, actionable, and focused on practical implementation.
     Highlight any interdependencies between the different areas.
-    No need to put " Executive Summary"Word"""
+    No need to put " Executive Summary"Word
+    Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
+    The analysis should be data-driven and provide actionable insights.
+    Format all numerical examples in plain text with proper spacing no numbering point"""
 
     return get_openai_response(
         prompt,
@@ -1333,7 +1343,10 @@ Please provide an 800-word conclusion that includes:
    - Long-range milestones
 
 Each section should directly relate to the business's specific situation and needs as detailed in the previous analyses.
-Focus on practical, actionable items and measurable outcomes. """
+Focus on practical, actionable items and measurable outcomes. 
+Ensure all sections include supporting facts, figures, and relevant industry statistics where applicable. 
+The analysis should be data-driven and provide actionable insights.
+Format all numerical examples in plain text with proper spacing no numbering point"""
 
     return get_openai_response(
         prompt,
@@ -1757,7 +1770,8 @@ def create_custom_styles():
             fontSize=12,
             leading=16,
             leftIndent=20,
-            fontName=base_font
+            fontName=base_font,
+            alignment=TA_JUSTIFY  # Add this line
         ),
         'title': ParagraphStyle(
             'CustomTitle',
@@ -1778,7 +1792,8 @@ def create_custom_styles():
             spaceAfter=15,
             fontName=bold_font,
             leading=40.5,
-            tracking=0
+            tracking=0,
+            alignment=TA_JUSTIFY  # Add this line
         ),
         'subheading': ParagraphStyle(
             'CustomSubheading',
@@ -1788,7 +1803,8 @@ def create_custom_styles():
             spaceBefore=15,
             spaceAfter=10,
             fontName=bold_font,
-            leading=18.2
+            leading=18.2,
+            alignment=TA_JUSTIFY  # Add this line
         ),
         'normal': ParagraphStyle(
             'CustomNormal',
@@ -1799,14 +1815,15 @@ def create_custom_styles():
             spaceAfter=6,
             fontName=base_font,
             leading=15.4,
-            tracking=0
+            tracking=0,
+            alignment=TA_JUSTIFY  # Add this line
         ),
         'content': ParagraphStyle(
             'CustomContent',
             parent=base_styles['Normal'],
             fontSize=10,
             textColor=colors.HexColor('#1a1a1a'),
-            alignment=TA_JUSTIFY,
+            alignment=TA_JUSTIFY,  # This was already correct
             spaceBefore=6,
             spaceAfter=6,
             fontName=base_font,
@@ -1822,7 +1839,8 @@ def create_custom_styles():
             firstLineIndent=0,
             fontName=base_font,
             leading=15.4,
-            tracking=0
+            tracking=0,
+            alignment=TA_JUSTIFY  # Add this line
         )
     }
     
