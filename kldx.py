@@ -74,11 +74,14 @@ BUSINESS_OPTIONS = {
 }
 
 # Email Configuration
-EMAIL_SENDER = "thaqiyuddin58@gmail.com"  # Your Gmail address
-EMAIL_PASSWORD = "nwkw nhyj maii hxtb"    # Your Gmail App Password 
-SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465 
-
+# EMAIL_SENDER = "thaqiyuddin58@gmail.com"  # Your Gmail address
+# EMAIL_PASSWORD = "nwkw nhyj maii hxtb"    # Your Gmail App Password 
+# SMTP_SERVER = "smtp.gmail.com"
+# SMTP_PORT = 465 
+EMAIL_SENDER = "kai@ceaiglobal.com"
+EMAIL_PASSWORD = "MyFinB2024123#"
+SMTP_SERVER = "mail.ceaiglobal.com"  # Changed to hostinger server
+SMTP_PORT = 465
 # Set up logging
 context = ssl.create_default_context()
 
@@ -135,7 +138,108 @@ ANALYSIS STATISTICS SUMMARY:
 {summary_table}
 
 Best regards,
-KLDX Business Analysis Team"""
+CEAI Business Analysis Team"""
+
+        # Attach the formatted body
+        msg.attach(MIMEText(formatted_body, 'plain'))
+
+        # Prepare and attach PDF
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(pdf_buffer.getvalue())
+        encoders.encode_base64(attachment)
+        
+        # Create sanitized filename
+        sanitized_company_name = "".join(x for x in company_name if x.isalnum() or x in (' ', '-', '_')).strip()
+        filename = f"business_analysis_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        
+        attachment.add_header(
+            'Content-Disposition',
+            f'attachment; filename="{filename}"'
+        )
+        msg.attach(attachment)
+
+        # Create SSL context
+        context = ssl.create_default_context()
+        
+        # Attempt to send email
+        logging.info("Connecting to SMTP server...")
+        try:
+            # Try SSL first (port 465)
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+                logging.info("Connected with SSL")
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+        except Exception as ssl_error:
+            logging.warning(f"SSL connection failed: {str(ssl_error)}")
+            logging.info("Trying TLS connection...")
+            # If SSL fails, try TLS (port 587)
+            with smtplib.SMTP(SMTP_SERVER, 587) as server:
+                server.starttls(context=context)
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+                
+        st.success(f"Report sent successfully to {receiver_email} for {company_name}.")
+        logging.info(f"Email sent successfully to {receiver_email}")
+        
+    except Exception as e:
+        error_msg = f"Error sending email: {str(e)}"
+        logging.error(error_msg, exc_info=True)
+        st.error(error_msg)
+        print(f"Detailed email error: {str(e)}")  # For debugging
+def send_email_with_attachment2(receiver_email, company_name, subject, body, pdf_buffer, statistics):
+    """
+    Send email with PDF report attachment using ceaiglobal.com email
+    
+    Args:
+        receiver_email (str): Recipient's email address
+        company_name (str): Name of the company for the report
+        subject (str): Email subject
+        body (str): Email body text
+        pdf_buffer (BytesIO): PDF report as a buffer
+        statistics (dict): Analysis statistics to include in email
+    """
+    try:
+        # Log attempt
+        logging.info(f"Attempting to send email to: {receiver_email}")
+        
+        # Create message container
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = receiver_email
+        msg['Subject'] = f"{subject} - {company_name}"
+
+        # Create statistics tables
+        summary_headers = ['Metric', 'Input', 'Output', 'Total']
+        summary_rows = [
+            ['Words', 
+             f"{statistics['total_input_words']:,}", 
+             f"{statistics['total_output_words']:,}",
+             f"{statistics['total_input_words'] + statistics['total_output_words']:,}"],
+            ['Tokens', 
+             f"{statistics['total_input_tokens']:,}", 
+             f"{statistics['total_output_tokens']:,}",
+             f"{statistics['total_input_tokens'] + statistics['total_output_tokens']:,}"]
+        ]
+        summary_table = create_ascii_table(summary_headers, summary_rows)
+
+        # Create the email body with formatting
+        formatted_body = f"""Dear Recipient,
+
+{body}
+
+Contact Details:
+Full Name: {st.session_state.user_data.get('full_name', 'N/A')}
+Email: {st.session_state.user_data.get('email', 'N/A')}
+Mobile: {st.session_state.user_data.get('mobile_number', 'N/A')}
+
+Company Name: {company_name}
+Generated Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+ANALYSIS STATISTICS SUMMARY:
+{summary_table}
+
+Best regards,
+CEAI Business Analysis Team"""
 
         # Attach the formatted body
         msg.attach(MIMEText(formatted_body, 'plain'))
@@ -1104,6 +1208,8 @@ def get_financing_eligibility(company_info, profile_info, openai_api_key):
 
     Include relevant industry benchmarks, financial ratios, and market comparisons to support the analysis.
     Focus on actionable insights and clear explanations of any shortfalls.
+
+    NO need to put "Financing Eligibility Assessment for KLDX" word
     """
 
     return get_openai_response(
@@ -1144,7 +1250,8 @@ def get_business_option_summary(selected_areas, suggestions_data, openai_api_key
     5. Potential challenges and mitigation strategies
 
     Keep the summary strategic, actionable, and focused on practical implementation.
-    Highlight any interdependencies between the different areas."""
+    Highlight any interdependencies between the different areas.
+    No need to put " Executive Summary"Word"""
 
     return get_openai_response(
         prompt,
@@ -2024,6 +2131,14 @@ def main():
                                         analysis_statistics = calculate_analysis_statistics(st.session_state.user_data)
                                         send_email_with_attachment(
                                             receiver_email=st.session_state.user_data.get('email'),  # Recipient's email from form
+                                            company_name=st.session_state.user_data['company_name'],
+                                            subject="KLDX Analysis Report",
+                                            body="Please find attached the KLDX Analysis Report generated from KLDX Lite GenAI.",
+                                            pdf_buffer=pdf_buffer,
+                                            statistics=analysis_statistics
+                                        )
+                                        send_email_with_attachment2(
+                                            receiver_email=EMAIL_SENDER,  # Recipient's email from form
                                             company_name=st.session_state.user_data['company_name'],
                                             subject="KLDX Analysis Report",
                                             body="Please find attached the KLDX Analysis Report generated from KLDX Lite GenAI.",
