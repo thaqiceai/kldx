@@ -53,6 +53,14 @@ from email.mime.text import MIMEText
 from email.mime.base import MIMEBase
 from email import encoders
 import uuid
+import smtplib
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
+from email.mime.base import MIMEBase
+from email import encoders
+import datetime
+import ssl
+import logging
 BUSINESS_OPTIONS = {
     "Business Valuation": "I want to assess my company's worth, helping me make informed decisions and gain investor trust.",
     "Financial Healthcheck": "I want to review my finances, checking assets, debts, cash flow, and overall stability",
@@ -64,100 +72,120 @@ BUSINESS_OPTIONS = {
     "Business Remodelling": "I want to reshape my operations to stay relevant and seize new market opportunities.",
     "Succession Planning": "I want to prepare for future leadership transitions, ensuring the right people continue my business legacy."
 }
-EMAIL_SENDER = "thaqiyuddin58@gmail.com"
-# Replace this with your App Password from Google Account settings
-EMAIL_PASSWORD = "nwkw nhyj maii hxtb"
+
+# Email Configuration
+EMAIL_SENDER = "thaqiyuddin58@gmail.com"  # Your Gmail address
+EMAIL_PASSWORD = "nwkw nhyj maii hxtb"    # Your Gmail App Password 
 SMTP_SERVER = "smtp.gmail.com"
-SMTP_PORT = 465  # Changed to 465 for SSL
+SMTP_PORT = 465 
 
-def count_words(text):
-    """Count the number of words in a text."""
-    if not text:
-        return 0
-    words = [word for word in text.split() if word.strip()]
-    return len(words)
+# Set up logging
+context = ssl.create_default_context()
 
-def count_tokens(text):
-    """Estimate the number of tokens in a text using a simple approximation."""
-    if not text:
-        return 0
-    words = count_words(text)
-    punctuation = len([char for char in text if char in '.,!?;:()[]{}""\''])
-    return words + punctuation
+def send_email_with_attachment(receiver_email, company_name, subject, body, pdf_buffer, statistics):
+    """
+    Send email with PDF report attachment using ceaiglobal.com email
+    
+    Args:
+        receiver_email (str): Recipient's email address
+        company_name (str): Name of the company for the report
+        subject (str): Email subject
+        body (str): Email body text
+        pdf_buffer (BytesIO): PDF report as a buffer
+        statistics (dict): Analysis statistics to include in email
+    """
+    try:
+        # Log attempt
+        logging.info(f"Attempting to send email to: {receiver_email}")
+        
+        # Create message container
+        msg = MIMEMultipart()
+        msg['From'] = EMAIL_SENDER
+        msg['To'] = receiver_email
+        msg['Subject'] = f"{subject} - {company_name}"
 
-def calculate_analysis_statistics(user_data):
-    """Calculate word and token counts for input and output separately."""
-    statistics = {
-        'total_input_words': 0,
-        'total_input_tokens': 0,
-        'total_output_words': 0,
-        'total_output_tokens': 0,
-        'input_counts': {},
-        'output_counts': {}
-    }
-    
-    # Input fields to analyze
-    input_keys = [
-        'company_name',
-        'industry',
-        'business_model',
-        'products_services',
-        'differentiation',
-        'raw_priorities'
-    ]
-    
-    # Output fields to analyze
-    output_keys = [
-        'company_analysis',
-        'business_priority_suggestions',
-        'executive_summary',
-        'company_summary',
-        'financing_eligibility',
-        'conclusion_analysis'
-    ]
-    
-    # Calculate input counts
-    for key in input_keys:
-        if key in user_data and user_data[key]:
-            words = count_words(str(user_data[key]))
-            tokens = count_tokens(str(user_data[key]))
-            statistics['input_counts'][key] = {
-                'words': words,
-                'tokens': tokens
-            }
-            statistics['total_input_words'] += words
-            statistics['total_input_tokens'] += tokens
-    
-    # Calculate output counts
-    for key in output_keys:
-        if key in user_data and user_data[key]:
-            words = count_words(user_data[key])
-            tokens = count_tokens(user_data[key])
-            statistics['output_counts'][key] = {
-                'words': words,
-                'tokens': tokens
-            }
-            statistics['total_output_words'] += words
-            statistics['total_output_tokens'] += tokens
-    
-    # Add selected areas analysis if present
-    if 'selected_areas' in user_data:
-        for area in user_data['selected_areas']:
-            key = f"{area.lower().replace(' ', '_')}_analysis"
-            if key in user_data and user_data[key]:
-                words = count_words(user_data[key])
-                tokens = count_tokens(user_data[key])
-                statistics['output_counts'][key] = {
-                    'words': words,
-                    'tokens': tokens
-                }
-                statistics['total_output_words'] += words
-                statistics['total_output_tokens'] += tokens
-    
-    return statistics
+        # Create statistics tables
+        summary_headers = ['Metric', 'Input', 'Output', 'Total']
+        summary_rows = [
+            ['Words', 
+             f"{statistics['total_input_words']:,}", 
+             f"{statistics['total_output_words']:,}",
+             f"{statistics['total_input_words'] + statistics['total_output_words']:,}"],
+            ['Tokens', 
+             f"{statistics['total_input_tokens']:,}", 
+             f"{statistics['total_output_tokens']:,}",
+             f"{statistics['total_input_tokens'] + statistics['total_output_tokens']:,}"]
+        ]
+        summary_table = create_ascii_table(summary_headers, summary_rows)
+
+        # Create the email body with formatting
+        formatted_body = f"""Dear Recipient,
+
+{body}
+
+Contact Details:
+Full Name: {st.session_state.user_data.get('full_name', 'N/A')}
+Email: {st.session_state.user_data.get('email', 'N/A')}
+Mobile: {st.session_state.user_data.get('mobile_number', 'N/A')}
+
+Company Name: {company_name}
+Generated Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
+
+ANALYSIS STATISTICS SUMMARY:
+{summary_table}
+
+Best regards,
+KLDX Business Analysis Team"""
+
+        # Attach the formatted body
+        msg.attach(MIMEText(formatted_body, 'plain'))
+
+        # Prepare and attach PDF
+        attachment = MIMEBase('application', 'octet-stream')
+        attachment.set_payload(pdf_buffer.getvalue())
+        encoders.encode_base64(attachment)
+        
+        # Create sanitized filename
+        sanitized_company_name = "".join(x for x in company_name if x.isalnum() or x in (' ', '-', '_')).strip()
+        filename = f"business_analysis_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+        
+        attachment.add_header(
+            'Content-Disposition',
+            f'attachment; filename="{filename}"'
+        )
+        msg.attach(attachment)
+
+        # Create SSL context
+        context = ssl.create_default_context()
+        
+        # Attempt to send email
+        logging.info("Connecting to SMTP server...")
+        try:
+            # Try SSL first (port 465)
+            with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT, context=context) as server:
+                logging.info("Connected with SSL")
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+        except Exception as ssl_error:
+            logging.warning(f"SSL connection failed: {str(ssl_error)}")
+            logging.info("Trying TLS connection...")
+            # If SSL fails, try TLS (port 587)
+            with smtplib.SMTP(SMTP_SERVER, 587) as server:
+                server.starttls(context=context)
+                server.login(EMAIL_SENDER, EMAIL_PASSWORD)
+                server.send_message(msg)
+                
+        st.success(f"Report sent successfully to {receiver_email} for {company_name}.")
+        logging.info(f"Email sent successfully to {receiver_email}")
+        
+    except Exception as e:
+        error_msg = f"Error sending email: {str(e)}"
+        logging.error(error_msg, exc_info=True)
+        st.error(error_msg)
+        print(f"Detailed email error: {str(e)}")  # For debugging
 
 def create_ascii_table(headers, rows, column_widths=None):
-    """Create an ASCII table with dynamic column widths."""
+    """Create an ASCII table for email formatting."""
     if column_widths is None:
         # Calculate column widths based on content
         column_widths = []
@@ -193,96 +221,6 @@ def create_ascii_table(headers, rows, column_widths=None):
     ])
 
     return table
-
-def send_email_with_attachment(receiver_email, company_name, subject, body, pdf_buffer, statistics):
-    """Send an email with the PDF attachment, including statistics and contact details."""
-    try:
-        msg = MIMEMultipart()
-        msg['From'] = EMAIL_SENDER
-        msg['To'] = receiver_email
-        msg['Subject'] = f"{subject} - {company_name}"
-
-        # Create summary statistics table
-        summary_headers = ['Metric', 'Input', 'Output', 'Total']
-        summary_rows = [
-            ['Words', 
-             f"{statistics['total_input_words']:,}", 
-             f"{statistics['total_output_words']:,}",
-             f"{statistics['total_input_words'] + statistics['total_output_words']:,}"],
-            ['Tokens', 
-             f"{statistics['total_input_tokens']:,}", 
-             f"{statistics['total_output_tokens']:,}",
-             f"{statistics['total_input_tokens'] + statistics['total_output_tokens']:,}"]
-        ]
-        summary_table = create_ascii_table(summary_headers, summary_rows)
-
-        # Create input breakdown table
-        input_headers = ['Input Section', 'Words', 'Tokens']
-        input_rows = [
-            [section.replace('_', ' ').title(), 
-             f"{counts['words']:,}", 
-             f"{counts['tokens']:,}"]
-            for section, counts in statistics['input_counts'].items()
-        ]
-        input_table = create_ascii_table(input_headers, input_rows)
-
-        # Create output breakdown table
-        output_headers = ['Output Section', 'Words', 'Tokens']
-        output_rows = [
-            [section.replace('_', ' ').title(), 
-             f"{counts['words']:,}", 
-             f"{counts['tokens']:,}"]
-            for section, counts in statistics['output_counts'].items()
-        ]
-        output_table = create_ascii_table(output_headers, output_rows)
-
-        # Format the email body with contact details
-        formatted_body = f"""Dear Recipient,
-
-{body}
-
-Contact Details:
-Full Name: {st.session_state.user_data.get('full_name', 'N/A')}
-Email: {st.session_state.user_data.get('email', 'N/A')}
-Mobile: {st.session_state.user_data.get('mobile_number', 'N/A')}
-
-Company Name: {company_name}
-Generated Date: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}
-
-ANALYSIS STATISTICS SUMMARY:
-{summary_table}
-
-INPUT BREAKDOWN:
-{input_table}
-
-OUTPUT BREAKDOWN:
-{output_table}
-
-Best regards,
-KLDX Business Analysis Team"""
-
-        msg.attach(MIMEText(formatted_body, 'plain'))
-
-        # Attach PDF with company name in filename
-        attachment = MIMEBase('application', 'octet-stream')
-        attachment.set_payload(pdf_buffer.getvalue())
-        encoders.encode_base64(attachment)
-        
-        sanitized_company_name = "".join(x for x in company_name if x.isalnum() or x in (' ', '-', '_')).strip()
-        filename = f"business_analysis_{sanitized_company_name}_{datetime.datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
-        
-        attachment.add_header(
-            'Content-Disposition',
-            f'attachment; filename="{filename}"'
-        )
-        msg.attach(attachment)
-
-        with smtplib.SMTP_SSL(SMTP_SERVER, SMTP_PORT) as server:
-            server.login(EMAIL_SENDER, EMAIL_PASSWORD)
-            server.send_message(msg)
-        st.success(f"Report sent to {receiver_email} for {company_name}.")
-    except Exception as e:
-        st.error(f"Error sending email: {str(e)}")
 
 BUSINESS_OPTIONS = {
     "Business Valuation": "I want to assess my company's worth, helping me make informed decisions and gain investor trust.",
@@ -936,7 +874,17 @@ def process_content(content, styles, elements):
         # Conclusion Headers
         "Advisor/Coach Need Analysis",
         "Targeted Solutions",
-        "KPI Timeline Breakdown"
+        "KPI Timeline Breakdown",
+        "Benefits and Impact Analysis",
+        "Potential Challenges and Mitigation Strategies",
+        "Funding Request",
+        "Business Profile",
+        "Detailed Criteria Analysis",
+        "Financial Profile",
+        "Recommendations",
+        "Competitive Landscape",
+        "Industry Statistics and Benchmarks",
+        " Market Size and Trends"
     ]
 
     # Split content into sections
@@ -1834,6 +1782,98 @@ def create_highlight_box(text, styles):
             ('ALIGN', (0,0), (-1,-1), 'LEFT'),
         ])
     )
+def calculate_analysis_statistics(user_data):
+    """
+    Calculate word and token counts for input and output separately.
+    
+    Args:
+        user_data (dict): Dictionary containing all user input and generated analyses
+    
+    Returns:
+        dict: Statistics including word and token counts for inputs and outputs
+    """
+    statistics = {
+        'total_input_words': 0,
+        'total_input_tokens': 0,
+        'total_output_words': 0,
+        'total_output_tokens': 0,
+        'input_counts': {},
+        'output_counts': {}
+    }
+    
+    # Input fields to analyze
+    input_keys = [
+        'company_name',
+        'industry',
+        'business_model',
+        'products_services',
+        'differentiation',
+        'raw_priorities'
+    ]
+    
+    # Output fields to analyze
+    output_keys = [
+        'company_analysis',
+        'business_priority_suggestions',
+        'executive_summary',
+        'company_summary',
+        'financing_eligibility',
+        'conclusion_analysis'
+    ]
+    
+    def count_words(text):
+        """Count words in text."""
+        if not text:
+            return 0
+        return len([word for word in str(text).split() if word.strip()])
+    
+    def count_tokens(text):
+        """Estimate tokens (words + punctuation)."""
+        if not text:
+            return 0
+        words = count_words(text)
+        punctuation = len([char for char in str(text) if char in '.,!?;:()[]{}""\''])
+        return words + punctuation
+    
+    # Calculate input counts
+    for key in input_keys:
+        if key in user_data and user_data[key]:
+            words = count_words(user_data[key])
+            tokens = count_tokens(user_data[key])
+            statistics['input_counts'][key] = {
+                'words': words,
+                'tokens': tokens
+            }
+            statistics['total_input_words'] += words
+            statistics['total_input_tokens'] += tokens
+    
+    # Calculate output counts
+    for key in output_keys:
+        if key in user_data and user_data[key]:
+            words = count_words(user_data[key])
+            tokens = count_tokens(user_data[key])
+            statistics['output_counts'][key] = {
+                'words': words,
+                'tokens': tokens
+            }
+            statistics['total_output_words'] += words
+            statistics['total_output_tokens'] += tokens
+    
+    # Add selected areas analysis if present
+    if 'selected_areas' in user_data:
+        for area in user_data['selected_areas']:
+            key = f"{area.lower().replace(' ', '_')}_analysis"
+            if key in user_data and user_data[key]:
+                words = count_words(user_data[key])
+                tokens = count_tokens(user_data[key])
+                statistics['output_counts'][key] = {
+                    'words': words,
+                    'tokens': tokens
+                }
+                statistics['total_output_words'] += words
+                statistics['total_output_tokens'] += tokens
+    
+    return statistics
 def main():
     initialize_session_state()
     render_header()
@@ -1905,13 +1945,13 @@ def main():
                 company_summary = get_company_summary(profile_info, openai_api_key)
                 st.session_state.user_data['company_summary'] = company_summary  # Save company summary
                 with st.expander("Company Profile Analysis", expanded=True):
-                    st.markdown("### Company Summary")
-                    st.write(company_summary)
+                    #st.markdown("### Company Summary")
+                    # st.write(company_summary)
                 
-                financing_eligibility = get_financing_eligibility(
-                    st.session_state.user_data, 
-                    profile_info, 
-                    openai_api_key
+                    financing_eligibility = get_financing_eligibility(
+                        st.session_state.user_data, 
+                        profile_info, 
+                        openai_api_key
                 )
                 st.session_state.user_data['financing_eligibility'] = financing_eligibility  # Save eligibility
                 with st.expander("Financing Eligibility Assessment (KLDX)", expanded=True):
@@ -1975,18 +2015,21 @@ def main():
                                             mime="application/pdf",
                                             help="Click to download your complete business analysis report"
                                         )
-                                    with st.spinner("Sending the report via email..."):
+
                                         # Calculate statistics before sending email
-                                        analysis_statistics = calculate_analysis_statistics(st.session_state.user_data)
                                         
-                                    # send_email_with_attachment(
-                                    #     st.session_state.user_data.get('email', "thaqiyuddin58@gmail.com"),  # Use provided email with fallback
-                                    #     st.session_state.user_data['company_name'],
-                                    #     "KLDX Analysis Report",
-                                    #     "Please find attached the KLDX Analysis Report generated from KLDX Lite GenAI.",
-                                    #     pdf_buffer,
-                                    #     analysis_statistics
-                                    # )
+
+                                        # Get user's email from the form data
+                                    with st.spinner("Sending the report via email..."):
+                                        analysis_statistics = calculate_analysis_statistics(st.session_state.user_data)
+                                        send_email_with_attachment(
+                                            receiver_email=st.session_state.user_data.get('email'),  # Recipient's email from form
+                                            company_name=st.session_state.user_data['company_name'],
+                                            subject="KLDX Analysis Report",
+                                            body="Please find attached the KLDX Analysis Report generated from KLDX Lite GenAI.",
+                                            pdf_buffer=pdf_buffer,
+                                            statistics=analysis_statistics
+                                        )
                             except Exception as e:
                                 st.error(f"Error generating PDF: {str(e)}")
                                 print(f"Detailed error: {str(e)}")  # For debugging
